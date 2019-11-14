@@ -1,5 +1,6 @@
 import csv
 import json
+import sqlite3
 
 # Use this method to make the TweetUser class attributes iterable for quick printing
 class MetaTweet(type):
@@ -176,11 +177,15 @@ for tweet in data:
                 tweetmentions.add(Mention(tweetId,m["id_str"],m["name"],m["screen_name"]))   
 
 print(len(users))
+
+################################################################################
+#
 # Dump the data to CSV
-#with open("data/users.csv", 'w', newline="", encoding="UTF-8") as outfile:
-    #writer = csv.writer(outfile,quoting=csv.QUOTE_ALL)
-    #for user in users:
-    #writer.writerows(list(users))
+#
+################################################################################
+with open("data/users.csv", 'w', newline="", encoding="UTF-8") as outfile:
+    writer = csv.writer(outfile,quoting=csv.QUOTE_ALL)
+    writer.writerows(list(users))
 
 with open("data/tweets.csv", 'w', newline="", encoding="UTF-8") as outfile:
     writer = csv.writer(outfile,quoting=csv.QUOTE_ALL)
@@ -201,3 +206,21 @@ with open("data/hashtags.csv", 'w', newline="", encoding="UTF-8") as outfile:
 with open("data/mentions.csv", 'w', newline="", encoding="UTF-8") as outfile:
     writer = csv.writer(outfile,quoting=csv.QUOTE_ALL)
     writer.writerows(list(tweetmentions))
+
+################################################################################
+#
+# Database the CSVs
+#
+################################################################################
+con = sqlite3.connect("data/LTEtwitter.db")
+
+cur = con.cursor()
+cur.execute("drop table hashtags")
+con.commit()
+cur.execute("create table hashtags (tweet_id text, hashtag text)")
+for ht in tweethashtags:
+    cur.execute("insert into hashtags values('" + ht.tweet_id + "','" + ht.tweet_id + "')")
+con.commit()
+
+for row in cur.execute("select * from hashtags"):
+    print(row)
