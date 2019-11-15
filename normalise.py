@@ -42,7 +42,7 @@ class RealTweet(metaclass=MetaTweet):
         self.user = user
         self.geo = geo
         self.coordinates = coordinates
-        self.place = place
+        self.place = "" # currently very few tweets have a place so ignoring and trying to dump the json into SQLLite causes a data type error
         self.is_quote_status = is_quote_status
         self.quote_count = quote_count
         self.reply_count = reply_count
@@ -140,14 +140,15 @@ with open("data/broadbalkdata-to-07112019.json", "r",encoding="UTF-8") as jdfile
 
 # This gives us a dictionary from the JSON data
 data = json.loads(contents)
-# Add our users here
+
+# stores for the data
 users = set()
 retweets = set()
 quotedtweets = set()
 tweethashtags = set()
 tweets = set()
 tweetmentions = set()
-print(len(data))
+
 for tweet in data:
     userId = tweet["user"]["id_str"]
     tweetId = tweet["id_str"]
@@ -209,18 +210,120 @@ with open("data/mentions.csv", 'w', newline="", encoding="UTF-8") as outfile:
 
 ################################################################################
 #
-# Database the CSVs
+# Database the CSVs. This probably makes pushing to CSVs redundant, but keep in 
+# for now.
+# Usefully because we have iterable objects we can cast to a list and apply 
+# all values for the inserts
 #
 ################################################################################
 con = sqlite3.connect("data/LTEtwitter.db")
 
 cur = con.cursor()
-cur.execute("drop table hashtags")
+
+cur.execute("drop table if exists tweet_users")
 con.commit()
-cur.execute("create table hashtags (tweet_id text, hashtag text)")
-for ht in tweethashtags:
-    cur.execute("insert into hashtags values('" + ht.tweet_id + "','" + ht.tweet_id + "')")
+cur.execute("""create table tweet_users (
+    user_id text primary key, 
+    name text, 
+    screen_name text,
+    followers_count integer, 
+    friends_count integer, 
+    verified integer, 
+    description text, 
+    geo_enabled integer,
+    url text, 
+    location text, 
+    listed_count integer)
+""")
+
+for tu in users:
+    cur.execute("insert into tweet_users values(?,?,?,?,?,?,?,?,?,?,?)", list(tu))
 con.commit()
 
-for row in cur.execute("select * from hashtags"):
+cur.execute("drop table if exists tweets")
+con.commit()
+cur.execute("""create table tweets (
+    tweet_id text primary key, 
+    created_at text, 
+    tweet_text text,
+    user_id text, 
+    geo text, 
+    coordinates text, 
+    place text, 
+    is_quote_status integer, 
+    quote_count integer, 
+    reply_count integer, 
+    retweet_count integer, 
+    favorite_count integer,
+    foreign key(user_id) references tweet_users(user_id)  
+)""")
+for tweet in tweets:
+    cur.execute("insert into tweets values(?,?,?,?,?,?,?,?,?,?,?,?)", list(tweet))
+con.commit()
+
+cur.execute("drop table if exists mentions")
+con.commit()
+cur.execute("""create table mentions (
+    tweet_id text,
+    mentioned_id text,
+    name text,
+    screen_name text,
+    foreign key (tweet_id) references tweets(tweet_id)
+    )""")
+for tm in tweetmentions:
+    cur.execute("insert into mentions values(?,?,?,?)", list(tm))
+con.commit()
+
+cur.execute("drop table if exists retweets")
+con.commit()
+cur.execute("""create table retweets (
+    retweet_id text primary key,
+    tweet_id text,
+    user_id text,
+    date text,
+    foreign key (tweet_id) references tweets(tweet_id),
+    foreign key (user_id) references tweet_users(user_id)
+    )""")
+for rt in retweets:
+    cur.execute("insert into retweets values(?,?,?,?)", list(rt))
+con.commit()
+
+cur.execute("drop table if exists quoted_tweets")
+con.commit()
+cur.execute("""create table quoted_tweets (
+    quotedtweet_id text primary key,
+    tweet_id text,
+    date text,
+    quote_text text,
+    user_id text, 
+    geo text, 
+    coordinates text, 
+    place text, 
+    is_quote_status integer, 
+    quote_count integer,
+    reply_count integer,
+    retweet_count integer,
+    favorite_count integer,
+    foreign key (tweet_id) references tweets(tweet_id),
+    foreign key (user_id) references tweet_users(user_id)
+    )""")
+for qt in quotedtweets:
+    cur.execute("insert into quoted_tweets values(?,?,?,?,?,?,?,?,?,?,?,?,?)", list(qt))
+con.commit()
+
+cur.execute("drop table if exists hashtags")
+con.commit()
+cur.execute("create table hashtags (tweet_id text, hashtag text, foreign key (tweet_id) references tweets(tweet_id))")
+for ht in tweethashtags:
+    cur.execute("insert into hashtags values(?,?)", list(ht))
+con.commit()
+
+
+# Sanity check to make sure queries have worked
+cur.execute("select * from tweet_user")
+rows = cur.fetchall()
+for row in rows:
     print(row)
+
+cur.close()
+con.close()
